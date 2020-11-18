@@ -848,6 +848,7 @@
 				E654EA861B6B27E600B0F2D0 /* Frameworks */,
 				E654EA871B6B27E600B0F2D0 /* Headers */,
 				E654EA881B6B27E600B0F2D0 /* Resources */,
+				A622A9312563E87100F207D8 /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -914,6 +915,23 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "sh \"${PROJECT_DIR}/../../ijkmedia/ijkplayer/version.sh\" \"${PROJECT_DIR}/../../ijkmedia/ijkplayer\" \"ijkversion.h\"";
+		};
+		A622A9312563E87100F207D8 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "PRODUCT_ROOT=$OBJROOT/../Products/\nBIN_ROOT=../bin/$CONFIGURATION/\nrm -rf $BIN_ROOT\nmkdir -p $BIN_ROOT\ncp -R $PRODUCT_ROOT/$CONFIGURATION-iphoneos/$PRODUCT_NAME.framework/ $BIN_ROOT/$PRODUCT_NAME.framework/\nif [ $PLATFORM_NAME == \"iphoneos\" ]\nthen\n    lipo -create $PRODUCT_ROOT/$CONFIGURATION-iphoneos/$PRODUCT_NAME.framework/$EXECUTABLE_NAME $PRODUCT_ROOT/$CONFIGURATION-iphonesimulator/$PRODUCT_NAME.framework/$EXECUTABLE_NAME -output $BIN_ROOT/$PRODUCT_NAME.framework/$EXECUTABLE_NAME\nelse\n    echo $PLATFORM_NAME \nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
