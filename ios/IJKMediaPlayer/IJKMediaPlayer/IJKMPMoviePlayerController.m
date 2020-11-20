@@ -34,7 +34,6 @@
 @dynamic currentPlaybackTime;
 @dynamic duration;
 @dynamic playableDuration;
-@synthesize bufferingProgress = _bufferingProgress;
 
 @dynamic isPreparedToPlay;
 @dynamic playbackState;
@@ -43,9 +42,14 @@
 @dynamic naturalSize;
 @dynamic scalingMode;
 @dynamic shouldAutoplay;
-@synthesize isDanmakuMediaAirPlay = _isDanmakuMediaAirPlay;
 
+@synthesize isAudioSync;
+@synthesize isSeekBuffering;
+@synthesize isVideoSync;
+
+@synthesize isDanmakuMediaAirPlay = _isDanmakuMediaAirPlay;
 @synthesize numberOfBytesTransferred = _numberOfBytesTransferred;
+@synthesize bufferingProgress = _bufferingProgress;
 
 - (id)initWithContentURL:(NSURL *)aUrl
 {
