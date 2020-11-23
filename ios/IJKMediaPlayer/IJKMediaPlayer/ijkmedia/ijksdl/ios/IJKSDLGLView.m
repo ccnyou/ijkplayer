@@ -34,48 +34,46 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     IJKSDLGLViewApplicationBackgroundState = 2
 };
 
-@interface IJKSDLGLView()
-@property(atomic,strong) NSRecursiveLock *glActiveLock;
+@interface IJKSDLGLView ()
+@property(atomic, strong) NSRecursiveLock *glActiveLock;
 @property(atomic) BOOL glActivePaused;
 @end
 
 @implementation IJKSDLGLView {
-    EAGLContext     *_context;
-    GLuint          _framebuffer;
-    GLuint          _renderbuffer;
-    GLint           _backingWidth;
-    GLint           _backingHeight;
+    EAGLContext *_context;
+    GLuint _framebuffer;
+    GLuint _renderbuffer;
+    GLint _backingWidth;
+    GLint _backingHeight;
 
-    int             _frameCount;
-    
-    int64_t         _lastFrameTime;
+    int _frameCount;
+
+    int64_t _lastFrameTime;
 
     IJK_GLES2_Renderer *_renderer;
-    int                 _rendererGravity;
+    int _rendererGravity;
 
-    BOOL            _isRenderBufferInvalidated;
+    BOOL _isRenderBufferInvalidated;
 
-    int             _tryLockErrorCount;
-    BOOL            _didSetupGL;
-    BOOL            _didStopGL;
-    BOOL            _didLockedDueToMovedToWindow;
-    BOOL            _shouldLockWhileBeingMovedToWindow;
+    int _tryLockErrorCount;
+    BOOL _didSetupGL;
+    BOOL _didStopGL;
+    BOOL _didLockedDueToMovedToWindow;
+    BOOL _shouldLockWhileBeingMovedToWindow;
     NSMutableArray *_registeredNotifications;
 
     IJKSDLGLViewApplicationState _applicationState;
 }
 
-@synthesize isThirdGLView              = _isThirdGLView;
-@synthesize scaleFactor                = _scaleFactor;
-@synthesize fps                        = _fps;
+@synthesize isThirdGLView = _isThirdGLView;
+@synthesize scaleFactor = _scaleFactor;
+@synthesize fps = _fps;
 
-+ (Class) layerClass
-{
-	return [CAEAGLLayer class];
++ (Class)layerClass {
+    return [CAEAGLLayer class];
 }
 
-- (id) initWithFrame:(CGRect)frame
-{
+- (id)initWithFrame:(CGRect)frame glContext:(EAGLContext *)context {
     self = [super initWithFrame:frame];
     if (self) {
         _tryLockErrorCount = 0;
@@ -86,14 +84,30 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
 
         _didSetupGL = NO;
         if ([self isApplicationActive] == YES)
-            [self setupGLOnce];
+            [self setupGLOnce:context];
     }
 
     return self;
 }
 
-- (void)willMoveToWindow:(UIWindow *)newWindow
-{
+- (id)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        _tryLockErrorCount = 0;
+        _shouldLockWhileBeingMovedToWindow = YES;
+        self.glActiveLock = [[NSRecursiveLock alloc] init];
+        _registeredNotifications = [[NSMutableArray alloc] init];
+        [self registerApplicationObservers];
+
+        _didSetupGL = NO;
+        if ([self isApplicationActive] == YES)
+            [self setupGLOnce:nil];
+    }
+
+    return self;
+}
+
+- (void)willMoveToWindow:(UIWindow *)newWindow {
     if (!_shouldLockWhileBeingMovedToWindow) {
         [super willMoveToWindow:newWindow];
         return;
@@ -105,8 +119,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     [super willMoveToWindow:newWindow];
 }
 
-- (void)didMoveToWindow
-{
+- (void)didMoveToWindow {
     [super didMoveToWindow];
     if (self.window && _didLockedDueToMovedToWindow) {
         [self unlockGLActive];
@@ -114,13 +127,12 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     }
 }
 
-- (BOOL)setupEAGLContext:(EAGLContext *)context
-{
+- (BOOL)setupEAGLContext:(EAGLContext *)context {
     glGenFramebuffers(1, &_framebuffer);
     glGenRenderbuffers(1, &_renderbuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, _framebuffer);
     glBindRenderbuffer(GL_RENDERBUFFER, _renderbuffer);
-    [_context renderbufferStorage:GL_RENDERBUFFER fromDrawable:(CAEAGLLayer*)self.layer];
+    [_context renderbufferStorage:GL_RENDERBUFFER fromDrawable:(CAEAGLLayer *)self.layer];
     glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &_backingWidth);
     glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &_backingHeight);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, _renderbuffer);
@@ -140,22 +152,20 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     return YES;
 }
 
-- (CAEAGLLayer *)eaglLayer
-{
-    return (CAEAGLLayer*) self.layer;
+- (CAEAGLLayer *)eaglLayer {
+    return (CAEAGLLayer *)self.layer;
 }
 
-- (BOOL)setupGL
-{
+- (BOOL)setupGL:(EAGLContext *)context {
     if (_didSetupGL)
         return YES;
 
-    CAEAGLLayer *eaglLayer = (CAEAGLLayer*) self.layer;
+    CAEAGLLayer *eaglLayer = (CAEAGLLayer *)self.layer;
     eaglLayer.opaque = YES;
-    eaglLayer.drawableProperties = [NSDictionary dictionaryWithObjectsAndKeys:
-                                    [NSNumber numberWithBool:NO], kEAGLDrawablePropertyRetainedBacking,
-                                    kEAGLColorFormatRGBA8, kEAGLDrawablePropertyColorFormat,
-                                    nil];
+    eaglLayer.drawableProperties = @{
+            kEAGLDrawablePropertyRetainedBacking: @NO,
+            kEAGLDrawablePropertyColorFormat: kEAGLColorFormatRGBA8
+    };
 
     _scaleFactor = [[UIScreen mainScreen] scale];
     if (_scaleFactor < 0.1f)
@@ -163,7 +173,13 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
 
     [eaglLayer setContentsScale:_scaleFactor];
 
-    _context = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
+    if (context) {
+        _context = context;
+        NSLog(@"using exists gl content:%@", context);
+    } else {
+        _context = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
+        NSLog(@"create new gl content:%@", context);
+    }
     if (_context == nil) {
         NSLog(@"failed to setup EAGLContext\n");
         return NO;
@@ -182,21 +198,23 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     return _didSetupGL;
 }
 
-- (BOOL)setupGLOnce
-{
+- (BOOL)setupGLOnce {
+    return [self setupGLOnce:nil];
+}
+
+- (BOOL)setupGLOnce:(EAGLContext *)context {
     if (_didSetupGL)
         return YES;
 
     if (![self tryLockGLActive])
         return NO;
 
-    BOOL didSetupGL = [self setupGL];
+    BOOL didSetupGL = [self setupGL:context];
     [self unlockGLActive];
     return didSetupGL;
 }
 
-- (BOOL)isApplicationActive
-{
+- (BOOL)isApplicationActive {
     switch (_applicationState) {
         case IJKSDLGLViewApplicationForegroundState:
             return YES;
@@ -216,15 +234,14 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     }
 }
 
-- (void)dealloc
-{
+- (void)dealloc {
     [self lockGLActive];
 
     _didStopGL = YES;
 
     EAGLContext *prevContext = [EAGLContext currentContext];
     [EAGLContext setCurrentContext:_context];
-    
+
     IJK_GLES2_Renderer_reset(_renderer);
     IJK_GLES2_Renderer_freeP(&_renderer);
 
@@ -249,14 +266,12 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     [self unlockGLActive];
 }
 
-- (void)setScaleFactor:(CGFloat)scaleFactor
-{
+- (void)setScaleFactor:(CGFloat)scaleFactor {
     _scaleFactor = scaleFactor;
     [self invalidateRenderBuffer];
 }
 
-- (void)layoutSubviews
-{
+- (void)layoutSubviews {
     [super layoutSubviews];
     if (self.window.screen != nil) {
         _scaleFactor = self.window.screen.scale;
@@ -264,8 +279,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     [self invalidateRenderBuffer];
 }
 
-- (void)setContentMode:(UIViewContentMode)contentMode
-{
+- (void)setContentMode:(UIViewContentMode)contentMode {
     [super setContentMode:contentMode];
 
     switch (contentMode) {
@@ -285,13 +299,12 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     [self invalidateRenderBuffer];
 }
 
-- (BOOL)setupRenderer: (SDL_VoutOverlay *) overlay
-{
+- (BOOL)setupRenderer:(SDL_VoutOverlay *)overlay {
     if (overlay == nil)
         return _renderer != nil;
 
     if (!IJK_GLES2_Renderer_isValid(_renderer) ||
-        !IJK_GLES2_Renderer_isFormat(_renderer, overlay->format)) {
+            !IJK_GLES2_Renderer_isFormat(_renderer, overlay->format)) {
 
         IJK_GLES2_Renderer_reset(_renderer);
         IJK_GLES2_Renderer_freeP(&_renderer);
@@ -309,17 +322,18 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     return YES;
 }
 
-- (void)invalidateRenderBuffer
-{
+- (void)invalidateRenderBuffer {
     NSLog(@"invalidateRenderBuffer\n");
     [self lockGLActive];
 
     _isRenderBufferInvalidated = YES;
 
+    __weak typeof(self) wself = self;
     if ([[NSThread currentThread] isMainThread]) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-            if (_isRenderBufferInvalidated)
-                [self display:nil];
+            __strong typeof(wself) sself = wself;
+            if (sself->_isRenderBufferInvalidated)
+                [sself display:nil];
         });
     } else {
         [self display:nil];
@@ -328,13 +342,12 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     [self unlockGLActive];
 }
 
-- (void) display_pixels: (IJKOverlay *) overlay {
+- (void)display_pixels:(IJKOverlay *)overlay {
     return;
 }
 
-- (void)display: (SDL_VoutOverlay *) overlay
-{
-    if (_didSetupGL == NO)
+- (void)display:(SDL_VoutOverlay *)overlay {
+    if (self->_didSetupGL == NO)
         return;
 
     if ([self isApplicationActive] == NO)
@@ -360,8 +373,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
 }
 
 // NOTE: overlay could be NULl
-- (void)displayInternal: (SDL_VoutOverlay *) overlay
-{
+- (void)displayInternal:(SDL_VoutOverlay *)overlay {
     if (![self setupRenderer:overlay]) {
         if (!overlay && !_renderer) {
             NSLog(@"IJKSDLGLView: setupDisplay not ready\n");
@@ -378,7 +390,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
         _isRenderBufferInvalidated = NO;
 
         glBindRenderbuffer(GL_RENDERBUFFER, _renderbuffer);
-        [_context renderbufferStorage:GL_RENDERBUFFER fromDrawable:(CAEAGLLayer*)self.layer];
+        [_context renderbufferStorage:GL_RENDERBUFFER fromDrawable:(CAEAGLLayer *)self.layer];
         glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &_backingWidth);
         glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &_backingHeight);
         IJK_GLES2_Renderer_setGravity(_renderer, _rendererGravity, _backingWidth, _backingHeight);
@@ -394,7 +406,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     [_context presentRenderbuffer:GL_RENDERBUFFER];
 
     int64_t current = (int64_t)SDL_GetTickHR();
-    int64_t delta   = (current > _lastFrameTime) ? current - _lastFrameTime : 0;
+    int64_t delta = (current > _lastFrameTime) ? current - _lastFrameTime : 0;
     if (delta <= 0) {
         _lastFrameTime = current;
     } else if (delta >= 1000) {
@@ -408,18 +420,15 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
 
 #pragma mark AppDelegate
 
-- (void) lockGLActive
-{
+- (void)lockGLActive {
     [self.glActiveLock lock];
 }
 
-- (void) unlockGLActive
-{
+- (void)unlockGLActive {
     [self.glActiveLock unlock];
 }
 
-- (BOOL) tryLockGLActive
-{
+- (BOOL)tryLockGLActive {
     if (![self.glActiveLock tryLock])
         return NO;
 
@@ -435,12 +444,11 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
         [self.glActiveLock unlock];
         return NO;
     }
-    
+
     return YES;
 }
 
-- (void)toggleGLPaused:(BOOL)paused
-{
+- (void)toggleGLPaused:(BOOL)paused {
     [self lockGLActive];
     if (!self.glActivePaused && paused) {
         if (_context != nil) {
@@ -454,8 +462,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     [self unlockGLActive];
 }
 
-- (void)registerApplicationObservers
-{
+- (void)registerApplicationObservers {
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(applicationWillEnterForeground)
@@ -488,8 +495,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     [_registeredNotifications addObject:UIApplicationWillTerminateNotification];
 }
 
-- (void)unregisterApplicationObservers
-{
+- (void)unregisterApplicationObservers {
     for (NSString *name in _registeredNotifications) {
         [[NSNotificationCenter defaultCenter] removeObserver:self
                                                         name:name
@@ -497,46 +503,40 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     }
 }
 
-- (void)applicationWillEnterForeground
-{
+- (void)applicationWillEnterForeground {
     NSLog(@"IJKSDLGLView:applicationWillEnterForeground: %d", (int)[UIApplication sharedApplication].applicationState);
     [self setupGLOnce];
     _applicationState = IJKSDLGLViewApplicationForegroundState;
     [self toggleGLPaused:NO];
 }
 
-- (void)applicationDidBecomeActive
-{
+- (void)applicationDidBecomeActive {
     NSLog(@"IJKSDLGLView:applicationDidBecomeActive: %d", (int)[UIApplication sharedApplication].applicationState);
     [self setupGLOnce];
     [self toggleGLPaused:NO];
 }
 
-- (void)applicationWillResignActive
-{
+- (void)applicationWillResignActive {
     NSLog(@"IJKSDLGLView:applicationWillResignActive: %d", (int)[UIApplication sharedApplication].applicationState);
     [self toggleGLPaused:YES];
     glFinish();
 }
 
-- (void)applicationDidEnterBackground
-{
+- (void)applicationDidEnterBackground {
     NSLog(@"IJKSDLGLView:applicationDidEnterBackground: %d", (int)[UIApplication sharedApplication].applicationState);
     _applicationState = IJKSDLGLViewApplicationBackgroundState;
     [self toggleGLPaused:YES];
     glFinish();
 }
 
-- (void)applicationWillTerminate
-{
+- (void)applicationWillTerminate {
     NSLog(@"IJKSDLGLView:applicationWillTerminate: %d", (int)[UIApplication sharedApplication].applicationState);
     [self toggleGLPaused:YES];
 }
 
 #pragma mark snapshot
 
-- (UIImage*)snapshot
-{
+- (UIImage *)snapshot {
     [self lockGLActive];
 
     UIImage *image = [self snapshotInternal];
@@ -546,8 +546,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     return image;
 }
 
-- (UIImage*)snapshotInternal
-{
+- (UIImage *)snapshotInternal {
     if (isIOS7OrLater()) {
         return [self snapshotInternalOnIOS7AndLater];
     } else {
@@ -555,8 +554,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     }
 }
 
-- (UIImage*)snapshotInternalOnIOS7AndLater
-{
+- (UIImage *)snapshotInternalOnIOS7AndLater {
     if (CGSizeEqualToSize(self.bounds.size, CGSizeZero)) {
         return nil;
     }
@@ -572,8 +570,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     return complexViewImage;
 }
 
-- (UIImage*)snapshotInternalOnIOS6AndBefore
-{
+- (UIImage *)snapshotInternalOnIOS6AndBefore {
     EAGLContext *prevContext = [EAGLContext currentContext];
     [EAGLContext setCurrentContext:_context];
 
@@ -591,7 +588,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
 
     NSInteger x = 0, y = 0, width = backingWidth, height = backingHeight;
     NSInteger dataLength = width * height * 4;
-    GLubyte *data = (GLubyte*)malloc(dataLength * sizeof(GLubyte));
+    GLubyte *data = (GLubyte *)malloc(dataLength * sizeof(GLubyte));
 
     // Read pixel data from the framebuffer
     glPixelStorei(GL_PACK_ALIGNMENT, 4);
@@ -603,7 +600,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     CGDataProviderRef ref = CGDataProviderCreateWithData(NULL, data, dataLength, NULL);
     CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
     CGImageRef iref = CGImageCreate(width, height, 8, 32, width * 4, colorspace, kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedLast,
-                                    ref, NULL, true, kCGRenderingIntentDefault);
+            ref, NULL, true, kCGRenderingIntentDefault);
 
     [EAGLContext setCurrentContext:prevContext];
 
@@ -631,8 +628,7 @@ typedef NS_ENUM(NSInteger, IJKSDLGLViewApplicationState) {
     return image;
 }
 
-- (void)setShouldLockWhileBeingMovedToWindow:(BOOL)shouldLockWhileBeingMovedToWindow
-{
+- (void)setShouldLockWhileBeingMovedToWindow:(BOOL)shouldLockWhileBeingMovedToWindow {
     _shouldLockWhileBeingMovedToWindow = shouldLockWhileBeingMovedToWindow;
 }
 @end

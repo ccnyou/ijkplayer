@@ -44,8 +44,10 @@ typedef enum IJKAVDiscard {
 } IJKAVDiscard;
 
 struct IjkMediaPlayer;
+@class EAGLContext;
 
 @interface IJKFFOptions : NSObject
+@property(nonatomic, strong) EAGLContext *glContext;
 
 +(IJKFFOptions *)optionsByDefault;
 
